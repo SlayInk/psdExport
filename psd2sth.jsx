@@ -72,7 +72,7 @@ function tryExport(options){
 }
 
 function getLayerDesc(layer,options, deepth) {
-  if(options.ignoreHiddenLayers && layerVisibility[layer] == false) return '';
+  if(options.ignoreHiddenLayers && !layerVisibility[layer]) return '';
   
   var desc = '';
   if(layer.kind == "LayerKind.TEXT") {
@@ -211,8 +211,8 @@ function exportDesc(descStr,exportPath){
 
 function exportPNG(layer, options, exportPath){
   if (!layer || !exportPath ||exportPath.length <= 0) return ;
-  if(layer.kind == "LayerKind.TEXT") return;
-  if(options.ignoreHiddenLayers && layerVisibility[layer]  == false) return ;
+  if(layer.kind == "LayerKind.TEXT" || layer.typename == "LayerSet") return;
+  if(options.ignoreHiddenLayers && !layerVisibility[layer]) return ;
   var actDoc = app.activeDocument;
   layer.copy();
   function newMode(mode) {
@@ -314,15 +314,14 @@ function getLayerVisiable(layer){
 
 function getLayers(layer, usedLayers){
   if(!layer.layers || layer.layers.length == 0) {
-    if(layer.typename != 'LayerSet') 
       return layer;
-    return null;
   }
   var len = layer.layers.length;
   for(var i = 0; i < len ;++i) {
     var child = getLayers(layer.layers[i], usedLayers);
     if(child) usedLayers.push(child);
   }
+  usedLayers.push(layer); 
 }
 
 function isPsdSaved(){
