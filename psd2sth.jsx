@@ -4,7 +4,7 @@ app.activeDocument.suspendHistory('All Modification', 'main()');
 
 function main(){
   if(!isPsdSaved()) {
-    Alert("Save the psd and try again");
+    alert("Save the psd and try again");
     return;
   }
   showDialog();
@@ -30,19 +30,20 @@ function showDialog(){
   
   okBtn.onClick =  function(){
     var exportOption = {
-      savePNG : dialog.savePNG.value;
-      saveDescFile : dialog.saveDescFile.value;
-      ignoreHiddenLayers : dialog.ignoreHiddenLayers.value;
+      savePNG : dialog.savePNG.value,
+      saveDescFile : dialog.saveDescFile.value,
+      ignoreHiddenLayers : dialog.ignoreHiddenLayers.value,
     };
     tryExport(exportOption);
     close(dialog);
   };
+    dialog.show();
 }
 
 function tryExport(options){
   if(!options.savePNG && !options.saveDescFile) return ;
   
-  fileName = decodeURI(app.activeDocument.anem);
+  fileName = decodeURI(app.activeDocument.name);
   fileName = fileName.substring(0, fileName.indexOf('.'));
   var exportPath = app.activeDocument.path + "/" + fileName + "/";
     
@@ -71,20 +72,25 @@ function tryExport(options){
 }
 
 function getLayerDesc(layer,options, deepth) {
-  if(options.ignoreHiddenLayers && !layerVisibility[layer]) return '';
+  if(options.ignoreHiddenLayers && layerVisibility[layer] == false) return '';
   
   var desc = '';
   if(layer.kind == "LayerKind.TEXT") {
     desc += makeTextDesc(layer, deepth);
-  }else if(layer.typename == 'LayerSet')(
-    if(layer.name.split('$')[1] == '$Button') {
+  }else if(layer.typename == 'LayerSet'){
+    if(layer.name.split('$')[1] == 'Button') {
       desc += makeButtonDesc(layer, deepth);
     }else {
       for (var i = layer.layers.length - 1; i >= 0 ; --i){
-        desc += getLayerDesc(layer.layers[i], deepth +1);
+        desc += getLayerDesc(layer.layers[i], options, deepth +1);
       }
     }
-  )
+  }else{
+      desc += makeIndent(deepth);
+      var obj = getPosAndWH(layer);
+      var name = replace(layer.name);
+      desc += '<e:Image id="'+name+'" width="'+obj.w+'" height="'+obj.h+'" source="'+name+'_png" x="'+obj.x+'" y="'+obj.y+'" />\n';
+  }
   return desc;
 }
 
@@ -109,7 +115,8 @@ function makeTextDesc(layer, deepth, bounds){
   }
   var contents = layer.textItem.contents.replace(/(\n)|(\r)/g,'');
   var obj = bounds? bounds : getPosAndWH(layer);
-  return '<e:Label id="text'+name+'" text="'+contents+'" size="'+Math.ceil(layer.textItem.size)+'" x="'+obj.x+'" y="'+obj.y+'" textAlign="'+
+
+  return makeIndent(deepth)+'<e:Label id="text'+name+'" text="'+contents+'" size="'+Math.ceil(layer.textItem.size)+'" x="'+obj.x+'" y="'+obj.y+'" textAlign="'+
         alisas(alignment) + '" width="'+obj.w+'" height="'+obj.h+'" fontFamily="'+layer.textItem.font+'" textColor="0x'+color+'" />\n';
 }
 
@@ -120,23 +127,25 @@ function makeButtonDesc(layerSet, deepth) {
   var desc = makeIndent(deepth);
   var name = replace(layerSet.name.split('$')[0]);
   var x,y,w,h;
-  var textLayer, imgArr = new Array(3)
+  var textLayer;
+  var imgArr = new Array(3);
   for(var idx = layers.length - 1; idx >= 0; -- idx) {
-    if(layers[idx].typename == 'ArtLayer' && layers[idx].kind != "LayerKind.TEXT") {
-      var obj = getPosAndWH(layers[idx]);
+    var layer = layers[idx];
+    if(layer.typename == 'ArtLayer' && layer.kind != "LayerKind.TEXT") {
+      var obj = getPosAndWH(layer);
       x = !x ? obj.x : (obj.x < x ? obj.x : x);
       y = !y ? obj.y : (obj.y < y ? obj.y : y);
       //bottom right point
       w = !w ? obj.x+obj.w : (obj.x+obj.w > w ? obj.x+obj.w : w);
       h = !h ? obj.y+obj.h : (obj.y+obj.h > h ? obj.y+obj.h : h);
     }
-    if(layer;.kind == "LayerKind.TEXT") {
+    if(layer.kind == "LayerKind.TEXT") {
       textLayer = layer;
     }else{
       var pTag = layer.name.split('_btn_')[1];
-      if(pTag == 'up') arr[0] = layer;
-      else if(pTag == 'down') arr[1] = layer;
-      else if(pTag == 'dis') arr[2] = layer;
+      if(pTag == 'up') imgArr[0] = layer;
+      else if(pTag == 'down') imgArr[1] = layer;
+      else if(pTag == 'dis') imgArr[2] = layer;
     }
   }
     
@@ -146,7 +155,7 @@ function makeButtonDesc(layerSet, deepth) {
   h = Math.ceil(h - y);
     
   var tmpDeepth = 0;
-  desc += '<e:Button id="' +name+'"Btn x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'">\n';
+  desc += '<e:Button id="' +name+'Btn" x="'+x+'" y="'+y+'" width="'+w+'" height="'+h+'">\n';
   desc += makeIndent(deepth + ++tmpDeepth);
   desc += '<e:skinName>\n';
   desc += makeIndent(deepth + ++tmpDeepth);
@@ -160,14 +169,18 @@ function makeButtonDesc(layerSet, deepth) {
   }
   desc += makeIndent(deepth + tmpDeepth);
   
-  var obj = getPosAndWH(arr[0]);
-  desc += '<e:Image width="'+obj.w+'" height="'+obj.h+'" source="'+arr[0].name+'_png" source.down="'+arr[1].name+'_png" source.down="'+
-          arr[2].name+'_png" />\n';
-  desc += makeIndent(deepth + --tmpDeepth);
+  var obj = getPosAndWH(imgArr[0]);
+  var donwDesc=  imgArr[1] ? ('source.down="'+imgArr[1].name+'_png" ' ): '' ;
+  var disDesc= imgArr[2] ? ('source.disable="'+ imgArr[2].name+'_png" ') : '';
+  desc += '<e:Image width="'+obj.w+'" height="'+obj.h+'" source="'+imgArr[0].name+'_png" '+
+                donwDesc +
+                 disDesc+
+                '/>\n';
+  desc += makeIndent(deepth + tmpDeepth--);
   desc += '</e:Skin>\n';
-  desc += makeIndent(deepth + --tmpDeepth);
+  desc += makeIndent(deepth + tmpDeepth--);
   desc += '</e:skinName>\n';
-  desc += makeIndent(deepth + --tmpDeepth);
+  desc += makeIndent(deepth + tmpDeepth--);
   desc += '</e:Button>\n';
   return desc;
 }
@@ -198,7 +211,8 @@ function exportDesc(descStr,exportPath){
 
 function exportPNG(layer, options, exportPath){
   if (!layer || !exportPath ||exportPath.length <= 0) return ;
-  if(options.ignoreHiddenLayers && !layerVisibility[layer]) return ;
+  if(layer.kind == "LayerKind.TEXT") return;
+  if(options.ignoreHiddenLayers && layerVisibility[layer]  == false) return ;
   var actDoc = app.activeDocument;
   layer.copy();
   function newMode(mode) {
@@ -223,7 +237,8 @@ function exportPNG(layer, options, exportPath){
   var tmpDoc = app.documents.add(
                 actDoc.width,
                 actDoc.htight,
-                "EXPORT PNG",
+                actDoc.resolution,
+                "EXPORT TMP PNG",
                 newMode(actDoc.mode),
                 DocumentFill.TRANSPARENT,
                 actDoc.pixelAspectRatio,
@@ -237,6 +252,7 @@ function exportPNG(layer, options, exportPath){
   if(file.exists) file.remove();
   var saveOp = new PNGSaveOptions();
   saveOp.compression = 9;//max compression
+  tmpDoc.saveAs(file,saveOp,true);
   tmpDoc.close(SaveOptions.DONOTSAVECHANGES);
   app.activeDocument = actDoc;
 }
@@ -245,7 +261,7 @@ function exportPNG(layer, options, exportPath){
 function makeIndent(deepth){
   var str = '';
   const TAB = '    ';
-  for(var i = deepth; i < deepth; ++i)
+  for(var i = 0; i < deepth; ++i)
     str += TAB;
   return str;
 }
@@ -298,7 +314,7 @@ function getLayerVisiable(layer){
 
 function getLayers(layer, usedLayers){
   if(!layer.layers || layer.layers.length == 0) {
-    if(layer.typeName != 'LayerSet') 
+    if(layer.typename != 'LayerSet') 
       return layer;
     return null;
   }
@@ -317,4 +333,4 @@ function isPsdSaved(){
 
 function close(wnd){
   wnd.close(0);
-}
+} 
